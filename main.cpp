@@ -4,43 +4,53 @@
 
 using namespace std;
 const double tx = 0.01; // =h
-const double ty = 0.000001; // t
+const double ty = 0.00001; // tau
 const double time0 = 1;
 const double x0 = 1;
 const int Mx = (int) (x0/tx);
 const int My = (int) (time0/ty);
-
-
+const int steps = 1000;
+const int timefile = My/steps;
+double maxy = 0;
+double miny = 10000;
 double u(double t, double x) {
-	return 3 * exp(-M_PI*M_PI * t) * sin(2 * M_PI * x) - t * x + t;
+	//return exp(5.0 - M_PI * M_PI * t) * sin(x * M_PI);
+	return M_PI * x + t + 2 * cos(10 * t) * sin(5 * x);
 }
 
 double u0(double x) {
-	return 3 * sin(2*M_PI * x);
+	//return exp(5.0) * sin(x * M_PI);
+	return M_PI * x + 2 * sin(5 * x);
 }
 
 double 	fi1(double t) {
-	return t;
+	//return 0;
+	return t; // 1
+
 }
 
 double fi2(double t) {
-	return 0;
+	//return 0;
+	return M_PI + t + 2 * cos(10 * t) * sin(5);
 }
 
 double psi1(double t) {
-	return t;
+	//return t;
+	return M_PI + 10 * cos(10 * t);
 }
 
 double psi2(double t) {
-	return t;
+	//return 	-exp(5.0 - M_PI * M_PI * t) * M_PI;
+	return M_PI + 10 * cos(10 * t) * cos(5);
 }
 
 
 double f(double t, double x) {
-	return 1 - x;
+	//return 0;
+	return 1 + sin(5 * x) * (50 * cos( 10 * t) - 20 * sin(10 * t));
 }
 
-const double alpha = 0.5;
+const double alpha = 1;
 
 
 void explisit(int mode,int leftborder,int rightborder, ofstream &fout) {
@@ -64,32 +74,149 @@ void explisit(int mode,int leftborder,int rightborder, ofstream &fout) {
 		if (rightborder == 1) {
 			lay2[Mx] = fi2(ty * i);
 		} else if (rightborder == 2) {
-			lay2[Mx] = ( 2 * tx * psi2(ty * i) + 4 * lay2[Mx - 1] - lay2[Mx - 2]);
+			lay2[Mx] = ( 2 * tx * psi2(ty * i) + 4 * lay2[Mx - 1] - lay2[Mx - 2]) /3;
 		}
 		double *tmp = lay2;
 		lay2 = lay1;
 		lay1 = tmp;
-		if  (mode == 2) {
+		if  ((i % timefile == 0) && mode == 2 ) {
 			for (int j = 0; j <= Mx; ++j) {
 				fout << j * tx << ' ' << lay1[j] << endl;
 			}
 			fout << endl << endl;
 		}
+		for(int j = 0; j <=Mx; ++j) {
+			if (abs(lay1[j]) > maxy) {
+				maxy = abs(lay1[j]);
+			}
+			if ( lay1[j] < miny) {
+				miny = lay1[j];
+			}
+		}
 	}
 	if (mode == 1) {
-		for (int j = 0; j <= Mx; ++j) {
-			cout << j * tx << ' ' << lay1[j] << ' ' << u(time0, j*tx) << endl;
+		double abspogr = 0;
+		for(int i = 0 ; i <= Mx; ++i) {
+			if( abs(u(time0, i * tx) - lay1[i]) > abspogr) {
+				abspogr = abs(u(time0, i * tx) - lay1[i]);
+			}
 		}
+		double maxrealfunk = 0;
+		for(int i = 0 ; i <= Mx; ++i) {
+			if (abs(u(time0, i * tx)) > maxrealfunk) {
+				maxrealfunk = abs(u(time0, i * tx));
+			}
+		}
+		double relativepogr = abspogr / maxrealfunk;
+		double pogr2 = 0;
+		for(int i = 0 ; i <= Mx; ++i) {
+			pogr2 += (u(time0, i * tx) - lay1[i]) * (u(time0, i * tx) - lay1[i]);
+		}
+		pogr2 *= tx;
+		pogr2 = sqrt(pogr2);
+		double pogr3 = pogr2/maxrealfunk;
+		cout << "abspogr : " << abspogr << endl;
+		cout << "relativepogr : " << relativepogr << endl;
+		cout << "evklid abs : " << pogr2 << endl;
+		cout << "evklid relative : " << pogr3 << endl;
 	}
 	delete[] lay1;
 	delete[] lay2;
 	return;
 }
 
-void implicit(int mode, int leftborder, int rightborder, ofstream &out) {
+void implicit(int mode, int leftborder, int rightborder, ofstream &fout) {
+	double ksi1;
+	double mu1;
+	double ksi2;
+	double mu2;
+	double bi = alpha * alpha * ty / tx / tx;
+	double ci = (1 + 2 * alpha * alpha * ty / tx /tx);
+	double ai = (alpha * alpha * ty / tx / tx);
+
+	double alpha1[Mx + 1];
+	double beta[Mx +1];
+	double lay[Mx + 1];
+	for(int i = 0 ; i <= Mx; ++i) {
+		lay[i] = u0(i * tx);
+	}
+	for(int i = 1; i <= My; ++i) {
+		if (leftborder == 1) {
+			ksi1 = 0;
+			mu1 = fi1( ty * i);
+		} else if (leftborder == 2) {
+			ksi1 = 1;
+			mu1 = -tx * psi1( ty * i);
+		} else {
+			cout << "error leftborder" << endl;
+			return;
+		}
+		if (rightborder == 1) {
+			ksi2 = 0;
+			mu2 = fi2 (ty * i);
+		} else if (rightborder == 2) {
+			ksi2 = 1;
+			mu2 = tx * psi2(ty * i);
+		} else {
+			cout << "error rightborder" << endl;
+			return;
+		}
+		alpha1[1] = ksi1;
+		beta[1] = mu1;
+		for (int j = 2 ; j <= Mx; ++j) {
+			alpha1[j] = bi/(ci - ai*alpha1[j-1]);
+			double fi = ty * f(i * ty, j * tx) + lay[j - 1];
+			beta[j] = (fi + ai * beta[j-1]) / (ci - ai * alpha1[j - 1]); 	
+		}
+		lay[Mx] = (mu2 + ksi2 * beta[Mx]) / (1 - ksi2 * alpha1[Mx]); 
+		for (int j = Mx - 1; j != -1 ; --j) {
+			lay[j] = alpha1[j + 1] * lay[j + 1] + beta[j + 1];
+		}
 
 
+		if  ((i % timefile == 0) && mode == 2 ) {
+			for (int j = 0; j <= Mx; ++j) {
+				fout << j * tx << ' ' << lay[j] << endl;
+			}
+			fout << endl << endl;
+		}
+		for(int j = 0; j <=Mx; ++j) {
+			if (abs(lay[j]) > maxy) {
+				maxy = abs(lay[j]);
+			}
+			if ( lay[j] < miny) {
+				miny = lay[j];
+			}
+		}
+		
+	}
 
+	if (mode == 1) {
+		double abspogr = 0;
+		for(int i = 0 ; i <= Mx; ++i) {
+			if( abs(u(time0, i * tx) - lay[i]) > abspogr) {
+				abspogr = abs(u(time0, i * tx) - lay[i]);
+			}
+		}
+		double maxrealfunk = 0;
+		for(int i = 0 ; i <= Mx; ++i) {
+			if (abs(u(time0, i * tx)) > maxrealfunk) {
+				maxrealfunk = abs(u(time0, i * tx));
+			}
+		}
+		double relativepogr = abspogr / maxrealfunk;
+		double pogr2 = 0;
+		for(int i = 0 ; i <= Mx; ++i) {
+			pogr2 += (u(time0, i * tx) - lay[i]) * (u(time0, i * tx) - lay[i]);
+		}
+		pogr2 *= tx;
+		pogr2 = sqrt(pogr2);
+		double pogr3 = pogr2/maxrealfunk;
+		cout << "abspogr : " << abspogr << endl;
+		cout << "relativepogr : " << relativepogr << endl;
+		cout << "evklid abs : " << pogr2 << endl;
+		cout << "evklid relative : " << pogr3 << endl;
+	}
 }
 
 
@@ -116,10 +243,11 @@ int main() {
 		implicit(mode, leftborder, rightborder, fout);
 	} else {
 		cout << "error method" << endl ;
+		return 1;
 	}
-	cout << "hi" ;
-	fflush(stdout);
+	ofstream omain("main.gn"), oplotter("plotter.gn");
+	omain << "set xrange [0:1]\nset yrange [" << (int) miny - 1<<": " <<  (int) maxy + 1 << "]\niter = 0\nload\"plotter.gn\"";
+	oplotter << "iter = iter + 1\nplot \"out.txt\" i iter u 1:2 w l lt 6 notitle\npause 0.01\nif (iter < " << steps << ") reread\n";
 	fout.close();
-	cout << endl << M_PI;
 	return 0;
 }
